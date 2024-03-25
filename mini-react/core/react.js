@@ -21,6 +21,7 @@ function createElement(type, props, ...children) {
     }
 }
 
+let root = null
 let nextWorkUnit = null
 function render(el, container) {
     nextWorkUnit = {
@@ -29,24 +30,8 @@ function render(el, container) {
             children: [el]
         }
     }
-    // // 处理type
-    // const dom = el.type === 'text' ? document.createTextNode(el.props.nodeValue) : document.createElement(el.type)
-    // // 处理props
-    // for (let key in el.props) {
-    //     if (key !== 'children') {
-    //         dom[key] = el.props[key]
-    //     }
-    // }
-    // // 处理children
-    // const children = el.props.children
-    // children.forEach(element => {
-    //     render(element, dom)
-    // });
-    // // 放入dom
-    // container.append(dom)
+    root = nextWorkUnit
 }
-
-
 
 function workLoop(deadline) {
     let temp = true
@@ -54,12 +39,28 @@ function workLoop(deadline) {
         nextWorkUnit = performWorkOfUnit(nextWorkUnit)
         temp = deadline.timeRemaining() > 0 
     }
+    if (!nextWorkUnit && root) {
+        commitRoot(root)
+    }
     requestIdleCallback(workLoop)
 }
 
+// 实现统一提交
+function commitRoot(root) {
+    commitWork(root.child)
+    root = null
+}
+
+function commitWork(fiber) {
+    if (!fiber) return
+    fiber.parent.dom.append(fiber.dom)
+    commitWork(fiber.child)
+    commitWork(fiber.sibling)
+}
+
+
 // 链式解构渲染节点
 function performWorkOfUnit(work) {
-       console.log('work :>------> ', work);
     if (!work.dom) {
         // 处理dom
         const dom = (work.dom = work.type === 'text' ? document.createTextNode(work.props.nodeValue) : document.createElement(work.type))
@@ -70,7 +71,7 @@ function performWorkOfUnit(work) {
             }
         }
         console.log('work :>> ', work);
-        work.parent.dom.append(dom)
+        // work.parent.dom.append(dom)
     }
     // 处理关联关系
     const children = work.props.children
