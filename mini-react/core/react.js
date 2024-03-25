@@ -10,7 +10,8 @@ function createTextNode(nodeValue) {
 
 function createElement(type, props, ...children) {
     const child = children.map(child => {
-        return typeof child === 'string' ? createTextNode(child) : child
+        const isText = typeof child === 'string' || typeof child === 'number'
+        return isText ? createTextNode(child) : child
     })
     return {
         type,
@@ -53,7 +54,11 @@ function commitRoot(root) {
 
 function commitWork(fiber) {
     if (!fiber) return
-    fiber.parent.dom.append(fiber.dom)
+    let fiberParent = fiber.parent
+    while (!fiberParent.dom) {
+        fiberParent = fiberParent.parent
+    }
+    if (fiber.dom) fiberParent.dom.append(fiber.dom)
     commitWork(fiber.child)
     commitWork(fiber.sibling)
 }
@@ -61,7 +66,8 @@ function commitWork(fiber) {
 
 // 链式解构渲染节点
 function performWorkOfUnit(work) {
-    if (!work.dom) {
+    const isFn = typeof work.type === 'function'
+    if (!work.dom && !isFn) {
         // 处理dom
         const dom = (work.dom = work.type === 'text' ? document.createTextNode(work.props.nodeValue) : document.createElement(work.type))
         // 处理props
@@ -70,11 +76,21 @@ function performWorkOfUnit(work) {
                 dom[key] = work.props[key]
             }
         }
-        console.log('work :>> ', work);
-        // work.parent.dom.append(dom)
     }
-    // 处理关联关系
-    const children = work.props.children
+    const children = isFn ? [work.type(work.props)] : work.props.children
+    initChildren(work, children)
+    if (work.child) {
+        return work.child
+    }
+    let nextWork = work
+    while (nextWork) {
+        if (nextWork.sibling) return nextWork.sibling
+        nextWork = nextWork.parent
+    }
+    return nextWork
+}
+
+function initChildren(work, children) {
     let prevChild = null
     children.forEach((child, index) => {
         // 为了不改变原本dom结构所以新建一个对象来保存
@@ -93,14 +109,6 @@ function performWorkOfUnit(work) {
         }
         prevChild = newWork
     })
-
-    if (work.child) {
-        return work.child
-    }
-    if (work.sibling) {
-        return work.sibling
-    }
-    return work.parent?.sibling
 }
 
 requestIdleCallback(workLoop)
